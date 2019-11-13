@@ -73,7 +73,7 @@ class RTDosiVolume(RTGeneralVolume):
         
 class RTMainWindow(QMainWindow):
    
-    from OpenFile import OpenFile
+    from OpenFile import OpenFile, OpenDicomSerie, OpenDosi
     
     def __init__(self):
         
@@ -81,6 +81,8 @@ class RTMainWindow(QMainWindow):
         self.myDosiVolume = RTDosiVolume()
         self.w1_moved = self.w2_moved = self.w3_moved = True
         self.rot1 = self.rot2 = self.rot3 = True
+        self.c_scale = 'HOUNSFIELD'
+        
         super().__init__()
         self.initUI()
         
@@ -99,8 +101,8 @@ class RTMainWindow(QMainWindow):
         ### File menu
         fileMenu = menubar.addMenu('File')
         fileMenu.addAction(QAction('Open', self, shortcut="Ctrl+O", triggered=self.OpenFile))        
-        fileMenu.addAction(QAction('Open a DICOM serie', self, triggered=RTDosiVolume.PrintColorMap))
-        fileMenu.addAction(QAction('Import dosimetry', self))
+        fileMenu.addAction(QAction('Open a DICOM serie', self, triggered=self.OpenDicomSerie))
+        fileMenu.addAction(QAction('Import dosimetry', self, triggered=self.OpenDosi))
         fileMenu.addAction(QAction('Import a RP file...', self))
         fileMenu.addSeparator()
         fileMenu.addAction(QAction('Save as...', self))
@@ -198,9 +200,9 @@ class RTMainWindow(QMainWindow):
         layout.addWidget(fc1,1,0)
         layout.addWidget(fc2,1,1)
         layout.addWidget(fc3,2,0)
-        #layout.addWidget(w1,0,0)
-        #layout.addWidget(w2,0,1)
-        #layout.addWidget(w3,3,0)
+        layout.addWidget(w1,0,0)
+        layout.addWidget(w2,0,1)
+        layout.addWidget(w3,3,0)
         layout.addWidget(vtkWidget,2,1)
         #layout.addWidget(pbar, 3, 1)
         #layout.addWidget(check1, 4, 0)
@@ -222,47 +224,70 @@ class RTMainWindow(QMainWindow):
 
     def show_ROI(self):
         check2 = self.sender()
-        print("show_ROI: " + str(check2.isChecked()))
-        
+        print("show_ROI: " + str(check2.isChecked()))        
         
     def on_mousewheel1(self,event):
-        global w1
         w1.setValue(w1.value()-event.step)
 	
     def on_mousewheel2(self,event):
-        global w2
         w2.setValue(w2.value()-event.step)
         
     def on_mousewheel3(self,event):
-        global w3
         w3.setValue(w3.value()-event.step)
         
-    def w1move(self):        
-        global w1_moved
+    def w1move(self):
         self.w1_moved = True
         self.update()
         self.w1_moved = False
 	
-    def w2move(self):        
-        global w2_moved
+    def w2move(self):
         self.w2_moved = True
         self.update()
         self.w2_moved = False
         
-    def w3move(self):        
-        global w3_moved
+    def w3move(self):
         self.w3_moved = True
         self.update()
         self.w3_moved = False
 
+    def SetScales(self):
+        """
+	Set the limits of sliders
+	"""
+        w1.setMaximum(self.myCTVolume.dim_x-1)
+        w2.setMaximum(self.myCTVolume.dim_y-1)
+        w3.setMaximum(self.myCTVolume.dim_z-1)
+        w1.setValue(int(self.myCTVolume.dim_x/2))
+        w2.setValue(int(self.myCTVolume.dim_y/2))
+        w3.setValue(int(self.myCTVolume.dim_z/2))
+
+    def Clear_axes(self, ClearAll = False):
+        """
+	Clear axes
+	"""
+	#if ((ROI_open==True)and(ROI_show==True)) or ((dosi_open == True)and(isodose_show == True)):
+        if self.w1_moved:  fc1.figure.gca().clear()
+        if self.w2_moved:  fc2.figure.gca().clear()                        
+        if self.w3_moved:  fc3.figure.gca().clear()
+            
+        if(ClearAll == True):
+            for fig in [fc1, fc2, fc3]: fig.figure.gca().clear()
+
+    def UpdateAll(self):
+        self.w1_moved = self.w2_moved = self.w3_moved = True
+        self.update()
+        self.w1_moved = self.w2_moved = self.w3_moved = False
+	
     def update(self):
         
-        print(w1.value(),w2.value(),w3.value())
+        #print(w1.value(),w2.value(),w3.value())
 
         ax1 = fc1.figure.gca()
         ax2 = fc2.figure.gca()
         ax3 = fc3.figure.gca()
 
+        self.Clear_axes()
+        
         ### CT        
         if(len(np.shape(self.myCTVolume.volume))==3): ### 3D files #############
             
@@ -285,9 +310,9 @@ class RTMainWindow(QMainWindow):
             if self.w1_moved:	ax1.imshow(im1, extent=ext7, cmap=self.myCTVolume.colormap)
             if self.w2_moved:	ax2.imshow(im2, extent=ext8, cmap=self.myCTVolume.colormap)
             if self.w3_moved:	ax3.imshow(im3, extent=ext9, cmap=self.myCTVolume.colormap)
-		
+            #print(im2)
+	    
         if(len(np.shape(self.myCTVolume.volume))==2): ### 2D files #############
-            
             im1 = self.myCTVolume.volume[:,:]
             ext7=[self.myCTVolume.origin[1],self.myCTVolume.origin[1]-self.myCTVolume.dim_y*self.myCTVolume.spacing[1],self.myCTVolume.origin[0]-self.myCTVolume.dim_x*self.myCTVolume.spacing[0],self.myCTVolume.origin[0]]
             if self.rot1:	im1, ext7 = np.rot90(im1), [ext7[3],ext7[2],ext7[0],ext7[1]]
@@ -300,12 +325,27 @@ class RTMainWindow(QMainWindow):
 ##			Update_profile()
 
 	#Set_axes_lim()
-        for fig in [fc1, fc2, fc3]: fig.draw()
-	
-	#if c_scale=='HOUNSFIELD':	SetDisplayRange(-1000,2000)
-	#if c_scale=='USER':		SetDisplayRange(0,30)
+       
+        if self.c_scale=='HOUNSFIELD': self.SetDisplayRange(-1000,2000)
+        if self.c_scale=='USER':	self.SetDisplayRange(0,30)
 
-	
+        if self.w1_moved:   fc1.draw()
+        if self.w2_moved:   fc2.draw()
+        if self.w3_moved:   fc3.draw()
+        
+    def SetDisplayRange(self, minI, maxI):
+        """ 
+	Set axes colorscale 
+	>>>Usage:
+	SetDisplayRange(-1000, 2000) #Hounsfield scale
+	"""
+        for fig in [fc1, fc2, fc3]:
+            for im in fig.figure.gca().get_images():    im.set_clim(minI, maxI)
+##            if dosi_open and isodose_show:
+##                    if(len(fig.figure.gca().get_images())>0):   fig.figure.gca().get_images()[0].set_clim(minI, maxI)
+##            else:
+##                    for im in fig.figure.gca().get_images():    im.set_clim(minI, maxI)
+	                
 class QVTKWidget(QVTKRenderWindowInteractor):
     
     def __init__(self):
