@@ -20,7 +20,9 @@ import sys
 from fbs_runtime.application_context.PyQt5 import ApplicationContext
 from PyQt5.QtWidgets import QFileDialog
 from PyQt5 import QtCore, QtGui, Qt
-    
+from PyQt5.QtWidgets import *
+from ROI import ROISet
+
 def OpenFile(self, filepath=None):
 
     self.statusBar().showMessage('Opening file ...')
@@ -169,7 +171,7 @@ def OpenDicomSerie(self, dirname=None):
 
     #self.Set_axes_lim_init()
     self.SetScales()
-    #CT_open = True
+    self.myCTVolume.open = True
     self.UpdateAll()
 
     self.statusBar().showMessage('file successfully opened!')
@@ -189,7 +191,7 @@ def OpenDosi(self,filepath=None):
         filename = QtCore.QFileInfo(filepath[0]).fileName()
         filedir = QtCore.QFileInfo(filepath[0]).path() # +'/'
 
-    print('Opening RD file ...')
+    self.statusBar().showMessage('Importing RD file ...')
 
     ### .dcm file ###
     if(filepath.endswith('.dcm')):
@@ -222,9 +224,63 @@ def OpenDosi(self,filepath=None):
 
     print('dosi_swapY, dosi_swapZ :', dosi_swapY, dosi_swapZ)
 
-    #dosi_open = True
-    #isodose_show = True
+    self.myDosiVolume.open = True
+    self.myDosiVolume.show = True
     #check1.select()
     self.UpdateAll()
 
     self.statusBar().showMessage('file successfully opened!')
+
+def OpenROI(self, filepath=None):
+    """
+    Open a RT-struct file with .dcm extension
+    """
+    
+##    if (self.myCTVolume.open == False): 
+##        #QMessageBox(QMessageBox.Critical, self.tr('You must open a CT first'))
+##        msgbox = QMessageBox()
+##        msgbox.setIcon(QMessageBox.Critical)
+##        msgbox.setWindowTitle('ERROR')
+##        msgbox.setText('You must open a CT first')
+##        #msgbox.setInformativeText('NOTE: all the previously saved data will be lost!')
+##        #msgbox.setStandardButtons(QMessageBox.No | QMessageBox.Yes)
+##        #msgbox.setDefaultButton(QMessageBox.No)
+##        msgbox.exec_()
+##        return
+
+    #else:
+    self.myROISet = ROISet() # create a new ROI set
+    self.statusBar().showMessage('Opening RS file ... ')
+    
+    # Opening file
+    if(filepath==False):
+        filepath, _ = QFileDialog.getOpenFileNames(self, "Open file","./","DICOM (*.dcm)")
+        filepath = filepath[0]
+        filename = QtCore.QFileInfo(filepath[0]).fileName()
+        filedir = QtCore.QFileInfo(filepath[0]).path() # +'/'
+        #print(filelist)
+
+    if(filepath.endswith('.dcm')==True):
+
+        ds = pydicom.read_file(filepath)
+        self.myROISet.N_ROI = len(ds.StructureSetROISequence)
+        self.myROISet.infos = np.empty((self.myROISet.N_ROI,7), dtype=np.object)
+        
+        for ROI_index in range(self.myROISet.N_ROI):	
+            self.myROISet.GetInfos(ds,ROI_index) # retrieve the info for all ROI
+##                isPTV = self.myROISet.infos[ROI_index,0].upper().startswith('PTV')
+##                isCTV = self.myROISet.infos[ROI_index,0].upper().startswith('CTV')
+##                isGTV = self.myROISet.infos[ROI_index,0].upper().startswith('GTV')
+##                if(isPTV or isCTV or isGTV):    self.myROISet.infos[ROI_index,6] = self.myROISet.ROI_3D(self.myROISet.infos, ROI_index)
+
+        self.myROISet.open = True
+        self.myROISet.show = True
+        
+    self.statusBar().showMessage('File successfully opened!')
+    #check2.select()
+    self.UpdateAll()
+    self.showROI()
+
+##        roimenu.entryconfig("Compute DVH...", state="normal")
+##        roimenu.entryconfig("Crop dosimetry", state="normal")
+##        roimenu.entryconfig("Normalize dosi to PTV dose", state="normal") 
